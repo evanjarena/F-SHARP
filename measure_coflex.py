@@ -1,13 +1,7 @@
 import numpy as np
 import sys,os
-from astropy.cosmology import Planck15
 import pandas as pd
 from astropy import units as u
-from scipy import interpolate
-
-from fastdist import fastdist
-
-
 
 """
 Script: Measure the cosmic flexion and shear-flexion two-point correlation functions from a dataset.
@@ -74,73 +68,43 @@ class MeasureCF2P:
         """
         # First, calculate the scatter in intrinsic flexion and ellipticity
         sigma_aF, sigma_aG, sigma_eps = self.get_intrinsic_scatter()
+        print('Intrinsic scatter:')
         print('sigma_aF, sigma_aG, sigma_eps =', sigma_aF, sigma_aG, sigma_eps)
         self.sigma_aF = sigma_aF
         self.sigma_aG = sigma_aG
         self.sigma_eps = sigma_eps
-
+        # Perform mean-subtraction to remove additive biases     
+        print('Means of lensing fields')
+        print('<F1>, <F2> =', np.mean(self.F1_list), np.mean(self.F2_list))
+        print('<G1>, <G2> =', np.mean(self.G1_list), np.mean(self.G2_list))
+        print('<eps1>, <eps2> =', np.mean(self.eps1_list), np.mean(self.eps2_list))
+        # Subtract means
+        self.F1_list -= np.mean(self.F1_list)
+        self.F2_list -= np.mean(self.F2_list)
+        self.G1_list -= np.mean(self.G1_list)
+        self.G2_list -= np.mean(self.G2_list)
+        self.eps1_list -= np.mean(self.eps1_list)
+        self.eps2_list -= np.mean(self.eps2_list)
+        print('Means of mean-subtracted lensing fields')
+        print('<F1>, <F2> =', np.mean(self.F1_list), np.mean(self.F2_list))
+        print('<G1>, <G2> =', np.mean(self.G1_list), np.mean(self.G2_list))
+        print('<eps1>, <eps2> =', np.mean(self.eps1_list), np.mean(self.eps2_list))
         # Get flexion-flexion correlation functions first. 
         # .. Get angular separations and bins
         theta_flexflex_list, flexflex_bins = self.theta_flexflex_bin()
         # .. Get weights and two-point arrays in each bin
         # .. .. flexflex_bins = array(wp_bins, xi_FF_plus_bins, ...)
-        flexflex_bins = self.get_binned_two_point_flexflex(theta_flexflex_list, flexflex_bins)
+        self.get_binned_two_point_flexflex(theta_flexflex_list, flexflex_bins)
         # .. Get two-point correlation functions and autovariances
-        flexflex = self.get_flexflex_corr(*flexflex_bins)
-        xi_FF_plus = flexflex[0] 
-        xi_FF_plus_autoVar = flexflex[1] 
-        xi_FF_minus = flexflex[2] 
-        xi_FF_minus_autoVar = flexflex[3]
-        xi_GG_plus = flexflex[4] 
-        xi_GG_plus_autoVar = flexflex[5] 
-        xi_GG_minus = flexflex[6] 
-        xi_GG_minus_autoVar = flexflex[7] 
-        xi_FG_plus = flexflex[8] 
-        xi_FG_plus_autoVar = flexflex[9] 
-        xi_FG_minus = flexflex[10] 
-        xi_FG_minus_autoVar = flexflex[11]
-        xi_GF_plus = flexflex[12] 
-        xi_GF_plus_autoVar = flexflex[13] 
-        xi_GF_minus = flexflex[14] 
-        xi_GF_minus_autoVar = flexflex[15]  
-        # .. Export flexion-flexion correlation functions to .pkl file
-        col_list = ['theta', 'xi_FF_plus', 'xi_FF_plus_autoVar', 'xi_FF_minus', 'xi_FF_minus_autoVar', 'xi_GG_plus', 'xi_GG_plus_autoVar', 'xi_GG_minus', 'xi_GG_minus_autoVar', 'xi_FG_plus', 'xi_FG_plus_autoVar', 'xi_FG_minus', 'xi_FG_minus_autoVar', 'xi_GF_plus', 'xi_GF_plus_autoVar', 'xi_GF_minus', 'xi_GF_minus_autoVar']
-        arrs = [theta_flexflex_list, xi_FF_plus, xi_FF_plus_autoVar, xi_FF_minus, xi_FF_minus_autoVar, xi_GG_plus, xi_GG_plus_autoVar, xi_GG_minus, xi_GG_minus_autoVar, xi_FG_plus, xi_FG_plus_autoVar, xi_FG_minus, xi_FG_minus_autoVar, xi_GF_plus, xi_GF_plus_autoVar, xi_GF_minus, xi_GF_minus_autoVar]
-        dat = {i:arrs[j] for i,j in zip(col_list, range(len(col_list)))}
-        out_frame = pd.DataFrame(data = dat, columns = col_list)
-        out_frame.to_pickle(self.survey+'/'+self.survey+'_Measure/flexion-flexion_two_point_measured_'+self.survey+'_bin_combo_'+self.bin_combo+'.pkl')
-
+        
         # Shear-flexion correlations
         # .. Get angular separations and bins
         theta_shearflex_list, shearflex_bins = self.theta_shearflex_bin()
         # .. Get weights and two-point arrays in each bin
         # .. .. flexflex_bins = array(wp_bins, xi_FF_plus_bins, ...)
-        shearflex_bins = self.get_binned_two_point_shearflex(theta_shearflex_list, shearflex_bins)
+        self.get_binned_two_point_shearflex(theta_shearflex_list, shearflex_bins)
         # .. Get two-point correlation functions
-        shearflex = self.get_shearflex_corr(*shearflex_bins)
-        xi_gamF_plus = shearflex[0]
-        xi_gamF_plus_autoVar = shearflex[1]
-        xi_gamF_minus = shearflex[2]
-        xi_gamF_minus_autoVar = shearflex[3]
-        xi_Fgam_plus = shearflex[4]
-        xi_Fgam_plus_autoVar = shearflex[5]
-        xi_Fgam_minus = shearflex[6]
-        xi_Fgam_minus_autoVar = shearflex[7]
-        xi_Ggam_plus = shearflex[8]
-        xi_Ggam_plus_autoVar = shearflex[9]
-        xi_Ggam_minus = shearflex[10]
-        xi_Ggam_minus_autoVar = shearflex[11]
-        xi_gamG_plus = shearflex[12]
-        xi_gamG_plus_autoVar = shearflex[13]
-        xi_gamG_minus = shearflex[14]
-        xi_gamG_minus_autoVar = shearflex[15]
-        # .. Export shear-flexion correlation functions to .pkl file
-        col_list = ['theta', 'xi_gamF_plus', 'xi_gamF_plus_autoVar', 'xi_gamF_minus', 'xi_gamF_minus_autoVar', 'xi_Fgam_plus', 'xi_Fgam_plus_autoVar', 'xi_Fgam_minus', 'xi_Fgam_minus_autoVar', 'xi_Ggam_plus', 'xi_Ggam_plus_autoVar', 'xi_Ggam_minus', 'xi_Ggam_minus_autoVar', 'xi_gamG_plus', 'xi_gamG_plus_autoVar', 'xi_gamG_minus', 'xi_gamG_minus_autoVar']
-        arrs = [theta_shearflex_list, xi_gamF_plus, xi_gamF_plus_autoVar, xi_gamF_minus, xi_gamF_minus_autoVar,  xi_Fgam_plus, xi_Fgam_plus_autoVar, xi_Fgam_minus, xi_Fgam_minus_autoVar, xi_Ggam_plus, xi_Ggam_plus_autoVar, xi_Ggam_minus, xi_Ggam_minus_autoVar, xi_gamG_plus, xi_gamG_plus_autoVar, xi_gamG_minus, xi_gamG_minus_autoVar]
-        dat = {i:arrs[j] for i,j in zip(col_list, range(len(col_list)))}
-        out_frame = pd.DataFrame(data = dat, columns = col_list)
-        out_frame.to_pickle(self.survey+'/'+self.survey+'_Measure/shear-flexion_two_point_measured_'+self.survey+'_bin_combo_'+self.bin_combo+'.pkl') 
-
+        
     def theta_flexflex_bin(self, theta_min=1, theta_max=100, N_theta=10):
         """
         List of theta values for real-space cosmic flexion correlation functions
@@ -169,7 +133,6 @@ class MeasureCF2P:
         bins = np.append(bin_low_list,bin_high_list[-1])
         return theta_list, bins
 
-
     def get_binned_two_point_flexflex(self, theta_list, bins):
         """
         Calculate the following quantities for each galaxy pair (i,j):
@@ -190,26 +153,35 @@ class MeasureCF2P:
         # Get the total number of bins
         N_bins = len(theta_list)
         # Define the arrays for two-point calculation
-        # .. Product of weights
-        wp_bins = [[] for _ in range(N_bins)]
+        # .. Number of pairs (product of weights)
+        Np = np.zeros(N_bins)
         # .. Auto-correlations
-        xi_FF_plus_bins = [[] for _ in range(N_bins)]
-        xi_FF_minus_bins = [[] for _ in range(N_bins)]
-        xi_FF_plus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_FF_minus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_GG_plus_bins = [[] for _ in range(N_bins)]
-        xi_GG_minus_bins = [[] for _ in range(N_bins)]
-        xi_GG_plus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_GG_minus_autoVar_bins = [[] for _ in range(N_bins)]
+        xi_FF_plus_bins = np.zeros(N_bins)
+        xi_FF_minus_bins = np.zeros(N_bins)
+        xi_FF_plus_autoVar_bins = np.zeros(N_bins)
+        xi_FF_minus_autoVar_bins = np.zeros(N_bins)
+        xi_GG_plus_bins = np.zeros(N_bins)
+        xi_GG_minus_bins = np.zeros(N_bins)
+        xi_GG_plus_autoVar_bins = np.zeros(N_bins)
+        xi_GG_minus_autoVar_bins = np.zeros(N_bins)
         # .. Cross-correlations
-        xi_FG_plus_bins = [[] for _ in range(N_bins)]
-        xi_FG_minus_bins = [[] for _ in range(N_bins)]
-        xi_FG_plus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_FG_minus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_GF_plus_bins = [[] for _ in range(N_bins)]
-        xi_GF_minus_bins = [[] for _ in range(N_bins)]
-        xi_GF_plus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_GF_minus_autoVar_bins = [[] for _ in range(N_bins)]
+        xi_FG_plus_bins = np.zeros(N_bins)
+        xi_FG_minus_bins = np.zeros(N_bins)
+        xi_FG_plus_autoVar_bins = np.zeros(N_bins)
+        xi_FG_minus_autoVar_bins = np.zeros(N_bins)
+        xi_GF_plus_bins = np.zeros(N_bins)
+        xi_GF_minus_bins = np.zeros(N_bins)
+        xi_GF_plus_autoVar_bins = np.zeros(N_bins)
+        xi_GF_minus_autoVar_bins = np.zeros(N_bins)
+        # .. B-mode correlations
+        xi_FF_cross1_bins = np.zeros(N_bins)
+        xi_FF_cross2_bins = np.zeros(N_bins)
+        xi_GG_cross1_bins = np.zeros(N_bins)
+        xi_GG_cross2_bins = np.zeros(N_bins)
+        xi_FG_cross1_bins = np.zeros(N_bins)
+        xi_FG_cross2_bins = np.zeros(N_bins)
+        xi_GF_cross1_bins = np.zeros(N_bins)
+        xi_GF_cross2_bins = np.zeros(N_bins)
 
         # Get the width of each grid cell:
         dg = np.max(bins)
@@ -239,28 +211,10 @@ class MeasureCF2P:
 
         for i in range(self.Ngals):
 
-            # Get grid coordinates for galaxy i
-            gx_i = gx_list[i]
-            gy_i = gy_list[i]
-            # Get (RA,Dec) for galaxy i
-            x_i = self.x_list[i]
-            y_i = self.y_list[i]
-            # Get size for galaxy i
-            a_i = self.a_list[i]
-            a_i *= (u.arcsec)
-            a_i = a_i.to(u.rad).value  
-            # Get weight of galaxy i
-            w_i = self.w_list[i]
-            # Get flexion of galaxy i
-            F1_i = self.F1_list[i]
-            F2_i = self.F2_list[i]
-            G1_i = self.G1_list[i]
-            G2_i = self.G2_list[i]
-
             # Get galaxy pairs {j} associated with galaxy i
             id = np.where((j_list > i) &
-                          (gx_list <= gx_i+1) & (gx_list >= gx_i-1) &
-                          (gy_list <= gy_i+1) & (gy_list >= gy_i-1))
+                          (gx_list <= gx_list[i]+1) & (gx_list >= gx_list[i]-1) &
+                          (gy_list <= gy_list[i]+1) & (gy_list >= gy_list[i]-1))
             # Positions of each galaxy j
             x_j_list = self.x_list[id]
             y_j_list = self.y_list[id]
@@ -278,42 +232,28 @@ class MeasureCF2P:
 
             # Calculate two-point for each pair (i,j)
             for j in range(N_j):
-
                 # Get separation between (i,j)
-                theta_ij = self.theta_ij(x_i,y_i,x_j_list[j],y_j_list[j])
+                theta_ij = np.sqrt((x_j_list[j]-self.x_list[i])**2.+(y_j_list[j]-self.y_list[i])**2.)
+                if theta_ij >= np.max(bins):
+                    continue
                 # Get polar angle between (i,j)
-                varPhi_ij = self.varPhi_ij(x_i,y_i,x_j_list[j],y_j_list[j])
-                # Calculate tangential and radial flexions for pair (i,j)
-                F1_rot_i = self.F1_rot(F1_i, F2_i, varPhi_ij)
-                F1_rot_j = self.F1_rot(F1_j_list[j], F2_j_list[j], varPhi_ij)
-                F2_rot_i = self.F2_rot(F1_i, F2_i, varPhi_ij)
-                F2_rot_j = self.F2_rot(F1_j_list[j], F2_j_list[j], varPhi_ij)
-                G1_rot_i = self.G1_rot(G1_i, G2_i, varPhi_ij)
-                G1_rot_j = self.G1_rot(G1_j_list[j], G2_j_list[j], varPhi_ij)
-                G2_rot_i = self.G2_rot(G1_i, G2_i, varPhi_ij)
-                G2_rot_j = self.G2_rot(G1_j_list[j], G2_j_list[j], varPhi_ij)
-                # Convert the flexions from 1/arcsec to 1/rad:
-                F1_rot_i /= (u.arcsec)
-                F1_rot_i = F1_rot_i.to(1/u.rad).value
-                F1_rot_j /= (u.arcsec)
-                F1_rot_j = F1_rot_j.to(1/u.rad).value
-                F2_rot_i /= (u.arcsec)
-                F2_rot_i = F2_rot_i.to(1/u.rad).value
-                F2_rot_j /= (u.arcsec)
-                F2_rot_j = F2_rot_j.to(1/u.rad).value
-                G1_rot_i /= (u.arcsec)
-                G1_rot_i = G1_rot_i.to(1/u.rad).value
-                G1_rot_j /= (u.arcsec)
-                G1_rot_j = G1_rot_j.to(1/u.rad).value
-                G2_rot_i /= (u.arcsec)
-                G2_rot_i = G2_rot_i.to(1/u.rad).value
-                G2_rot_j /= (u.arcsec)
-                G2_rot_j = G2_rot_j.to(1/u.rad).value
-                # Convert size to rad
-                a_j = a_j_list[j]*(u.arcsec)
-                a_j = a_j.to(u.rad).value
+                varPhi_ij = np.arctan2((y_j_list[j]-self.y_list[i]), (x_j_list[j]-self.x_list[i]))
+                # Get trig functions associated with polar angle
+                cos_varPhi_ij = np.cos(varPhi_ij)
+                sin_varPhi_ij = np.sin(varPhi_ij)
+                cos_3varPhi_ij = np.cos(3*varPhi_ij)
+                sin_3varPhi_ij = np.sin(3*varPhi_ij)
+                # Calculate rotated flexions for pair (i,j)
+                F1_rot_i = -self.F1_list[i]*cos_varPhi_ij - self.F2_list[i]*sin_varPhi_ij
+                F1_rot_j = -F1_j_list[j]*cos_varPhi_ij - F2_j_list[j]*sin_varPhi_ij
+                F2_rot_i = -self.F2_list[i]*cos_varPhi_ij + self.F1_list[i]*sin_varPhi_ij
+                F2_rot_j = -F2_j_list[j]*cos_varPhi_ij + F1_j_list[j]*sin_varPhi_ij
+                G1_rot_i = self.G1_list[i]*cos_3varPhi_ij + self.G2_list[i]*sin_3varPhi_ij 
+                G1_rot_j = G1_j_list[j]*cos_3varPhi_ij + G2_j_list[j]*sin_3varPhi_ij
+                G2_rot_i = self.G2_list[i]*cos_3varPhi_ij - self.G1_list[i]*sin_3varPhi_ij
+                G2_rot_j = G2_j_list[j]*cos_3varPhi_ij - G1_j_list[j]*sin_3varPhi_ij
                 # Weight for each pair
-                wp_ij = w_i*w_j_list[j]
+                wp_ij = self.w_list[i]*w_j_list[j]
                 # Two-points for each pair
                 xi_FF_p_ij = wp_ij*(F1_rot_i*F1_rot_j + F2_rot_i*F2_rot_j)
                 xi_FF_m_ij = wp_ij*(F1_rot_i*F1_rot_j - F2_rot_i*F2_rot_j)
@@ -324,14 +264,23 @@ class MeasureCF2P:
                 xi_GF_p_ij = wp_ij*(G1_rot_i*F1_rot_j + G2_rot_i*F2_rot_j)
                 xi_GF_m_ij = wp_ij*(G1_rot_i*F1_rot_j - G2_rot_i*F2_rot_j)
                 # Autovar for each pair
-                xi_FF_p_aV_ij = (wp_ij/(a_i*a_j))**2.
-                xi_FF_m_aV_ij = xi_FF_p_aV_ij
-                xi_GG_p_aV_ij = xi_FF_p_aV_ij
-                xi_GG_m_aV_ij = xi_FF_p_aV_ij
-                xi_FG_p_aV_ij = xi_FF_p_aV_ij
-                xi_FG_m_aV_ij = xi_FF_p_aV_ij
-                xi_GF_p_aV_ij = xi_FF_p_aV_ij
-                xi_GF_m_aV_ij = xi_FF_p_aV_ij
+                xi_FF_p_aV_ij = (wp_ij/(self.a_list[i]*a_j_list[j]))**2.
+                #xi_FF_m_aV_ij = xi_FF_p_aV_ij
+                #xi_GG_p_aV_ij = xi_FF_p_aV_ij
+                #xi_GG_m_aV_ij = xi_FF_p_aV_ij
+                #xi_FG_p_aV_ij = xi_FF_p_aV_ij
+                #xi_FG_m_aV_ij = xi_FF_p_aV_ij
+                #xi_GF_p_aV_ij = xi_FF_p_aV_ij
+                #xi_GF_m_aV_ij = xi_FF_p_aV_ij
+                # B-mode correlations for each pair
+                xi_FF_c1_ij = wp_ij*F1_rot_i*F2_rot_j
+                xi_FF_c2_ij = wp_ij*F2_rot_i*F1_rot_j
+                xi_GG_c1_ij = wp_ij*G1_rot_i*G2_rot_j
+                xi_GG_c2_ij = wp_ij*G2_rot_i*G1_rot_j
+                xi_FG_c1_ij = wp_ij*F1_rot_i*G2_rot_j
+                xi_FG_c2_ij = wp_ij*F2_rot_i*G1_rot_j
+                xi_GF_c1_ij = wp_ij*G1_rot_i*F2_rot_j
+                xi_GF_c2_ij = wp_ij*G2_rot_i*F1_rot_j
 
                 # Get the bin for each galaxy pair (i,j).  It is simplest to use
                 # np.digitize(theta_ij, bins).  This returns the bin number that 
@@ -341,26 +290,123 @@ class MeasureCF2P:
                 bin_ij = np.digitize(theta_ij, bins, right=True)
                 if (bin_ij > 0) & (bin_ij < N_bins + 1):
                     bin_index = bin_ij-1
-                    wp_bins[bin_index].append(wp_ij)
-                    xi_FF_plus_bins[bin_index].append(xi_FF_p_ij)
-                    xi_FF_minus_bins[bin_index].append(xi_FF_m_ij)
-                    xi_GG_plus_bins[bin_index].append(xi_GG_p_ij)
-                    xi_GG_minus_bins[bin_index].append(xi_GG_m_ij)
-                    xi_FG_plus_bins[bin_index].append(xi_FG_p_ij)
-                    xi_FG_minus_bins[bin_index].append(xi_FG_m_ij)
-                    xi_GF_plus_bins[bin_index].append(xi_GF_p_ij)
-                    xi_GF_minus_bins[bin_index].append(xi_GF_m_ij)
+                    
+                    Np[bin_index] += wp_ij
+                    
+                    xi_FF_plus_bins[bin_index] += xi_FF_p_ij
+                    xi_FF_minus_bins[bin_index] += xi_FF_m_ij
+                    xi_GG_plus_bins[bin_index] += xi_GG_p_ij
+                    xi_GG_minus_bins[bin_index] += xi_GG_m_ij
+                    xi_FG_plus_bins[bin_index] += xi_FG_p_ij
+                    xi_FG_minus_bins[bin_index] += xi_FG_m_ij
+                    xi_GF_plus_bins[bin_index] += xi_GF_p_ij
+                    xi_GF_minus_bins[bin_index] += xi_GF_m_ij
 
-                    xi_FF_plus_autoVar_bins[bin_index].append(xi_FF_p_aV_ij)
-                    xi_FF_minus_autoVar_bins[bin_index].append(xi_FF_m_aV_ij)
-                    xi_GG_plus_autoVar_bins[bin_index].append(xi_GG_p_aV_ij)
-                    xi_GG_minus_autoVar_bins[bin_index].append(xi_GG_m_aV_ij)
-                    xi_FG_plus_autoVar_bins[bin_index].append(xi_FG_p_aV_ij)
-                    xi_FG_minus_autoVar_bins[bin_index].append(xi_FG_m_aV_ij)
-                    xi_GF_plus_autoVar_bins[bin_index].append(xi_GF_p_aV_ij)
-                    xi_GF_minus_autoVar_bins[bin_index].append(xi_GF_m_aV_ij)
+                    xi_FF_plus_autoVar_bins[bin_index] += xi_FF_p_aV_ij
+                    #xi_FF_minus_autoVar_bins[bin_index] += xi_FF_m_aV_ij
+                    #xi_GG_plus_autoVar_bins[bin_index] += xi_GG_p_aV_ij
+                    #xi_GG_minus_autoVar_bins[bin_index] += xi_GG_m_aV_ij
+                    #xi_FG_plus_autoVar_bins[bin_index] += xi_FG_p_aV_ij
+                    #xi_FG_minus_autoVar_bins[bin_index] += xi_FG_m_aV_ij
+                    #xi_GF_plus_autoVar_bins[bin_index] += xi_GF_p_aV_ij
+                    #xi_GF_minus_autoVar_bins[bin_index] += xi_GF_m_aV_ij
+                    
+                    xi_FF_cross1_bins[bin_index] += xi_FF_c1_ij
+                    xi_FF_cross2_bins[bin_index] += xi_FF_c2_ij
+                    xi_GG_cross1_bins[bin_index] += xi_GG_c1_ij
+                    xi_GG_cross2_bins[bin_index] += xi_GG_c2_ij
+                    xi_FG_cross1_bins[bin_index] += xi_FG_c1_ij
+                    xi_FG_cross2_bins[bin_index] += xi_FG_c2_ij
+                    xi_GG_cross1_bins[bin_index] += xi_GG_c1_ij
+                    xi_GG_cross2_bins[bin_index] += xi_GG_c2_ij
+
+        xi_FF_plus = xi_FF_plus_bins/Np
+        xi_FF_minus = xi_FF_minus_bins/Np
+        xi_GG_plus = xi_GG_plus_bins/Np
+        xi_GG_minus = xi_GG_minus_bins/Np
+        xi_FG_plus = xi_FG_plus_bins/Np
+        xi_FG_minus = xi_FG_minus_bins/Np
+        xi_GF_plus = xi_GF_plus_bins/Np
+        xi_GF_minus = xi_GF_minus_bins/Np         
         
-        return wp_bins, xi_FF_plus_bins, xi_FF_minus_bins, xi_GG_plus_bins, xi_GG_minus_bins,  xi_FG_plus_bins, xi_FG_minus_bins,  xi_GF_plus_bins, xi_GF_minus_bins, xi_FF_plus_autoVar_bins, xi_FF_minus_autoVar_bins, xi_GG_plus_autoVar_bins, xi_GG_minus_autoVar_bins, xi_FG_plus_autoVar_bins, xi_FG_minus_autoVar_bins, xi_GF_plus_autoVar_bins, xi_GF_minus_autoVar_bins,
+        #xi_FF_plus_autoVar = xi_FF_plus_autoVar_bins*(self.sigma_aF**4./(2*Np**2.))
+        #xi_FF_minus_autoVar = xi_FF_minus_autoVar_bins*(self.sigma_aF**4./(2*Np**2.))
+        #xi_GG_plus_autoVar = xi_GG_plus_autoVar_bins*(self.sigma_aG**4./(2*Np**2.))
+        #xi_GG_minus_autoVar = xi_GG_minus_autoVar_bins*(self.sigma_aG**4./(2*Np**2.))
+        #xi_FG_plus_autoVar = xi_FG_plus_autoVar_bins*(self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))
+        #xi_FG_minus_autoVar = xi_FG_minus_autoVar_bins*(self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))
+        #xi_GF_plus_autoVar = xi_GF_plus_autoVar_bins*(self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))
+        #xi_GF_minus_autoVar = xi_GF_minus_autoVar_bins*(self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))
+
+        xi_FF_plus_autoVar = xi_FF_plus_autoVar_bins*(self.sigma_aF**4./(2*Np**2.))
+        xi_FF_minus_autoVar = xi_FF_plus_autoVar_bins*(self.sigma_aF**4./(2*Np**2.))
+        xi_GG_plus_autoVar = xi_FF_plus_autoVar_bins*(self.sigma_aG**4./(2*Np**2.))
+        xi_GG_minus_autoVar = xi_FF_plus_autoVar_bins*(self.sigma_aG**4./(2*Np**2.))
+        xi_FG_plus_autoVar = xi_FF_plus_autoVar_bins*(self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))
+        xi_FG_minus_autoVar = xi_FF_plus_autoVar_bins*(self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))
+        xi_GF_plus_autoVar = xi_FF_plus_autoVar_bins*(self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))
+        xi_GF_minus_autoVar = xi_FF_plus_autoVar_bins*(self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))
+
+        xi_FF_cross1 = xi_FF_cross1_bins/Np
+        xi_FF_cross2 = xi_FF_cross2_bins/Np
+        xi_GG_cross1 = xi_GG_cross1_bins/Np
+        xi_GG_cross2 = xi_GG_cross2_bins/Np
+        xi_FG_cross1 = xi_FG_cross1_bins/Np
+        xi_FG_cross2 = xi_FG_cross2_bins/Np
+        xi_GF_cross1 = xi_GF_cross1_bins/Np
+        xi_GF_cross2 = xi_GF_cross2_bins/Np
+
+        # Convert flexions from 1/arcsec^2 to 1/rad^2
+        xi_FF_plus = (xi_FF_plus/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_FF_minus = (xi_FF_minus/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_GG_plus = (xi_GG_plus/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_GG_minus = (xi_GG_minus/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_FG_plus = (xi_FG_plus/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_FG_minus = (xi_FG_minus/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_GF_plus = (xi_GF_plus/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_GF_minus = (xi_GF_minus/u.arcsec**2.).to(1/u.rad**2.).value
+
+        xi_FF_cross1 = (xi_FF_cross1/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_FF_cross2 = (xi_FF_cross2/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_GG_cross1 = (xi_GG_cross1/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_GG_cross2 = (xi_GG_cross2/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_FG_cross1 = (xi_FG_cross1/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_FG_cross2 = (xi_FG_cross2/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_GG_cross1 = (xi_GG_cross1/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_GG_cross2 = (xi_GG_cross2/u.arcsec**2.).to(1/u.rad**2.).value
+
+        xi_FF_plus_autoVar = (xi_FF_plus_autoVar/u.arcsec**4.).to(1/u.rad**4.).value
+        xi_FF_minus_autoVar = (xi_FF_minus_autoVar/u.arcsec**4.).to(1/u.rad**4.).value
+        xi_GG_plus_autoVar = (xi_GG_plus_autoVar/u.arcsec**4.).to(1/u.rad**4.).value
+        xi_GG_minus_autoVar = (xi_GG_minus_autoVar/u.arcsec**4.).to(1/u.rad**4.).value
+        xi_FG_plus_autoVar = (xi_FG_plus_autoVar/u.arcsec**4.).to(1/u.rad**4.).value
+        xi_FG_minus_autoVar = (xi_FG_minus_autoVar/u.arcsec**4.).to(1/u.rad**4.).value
+        xi_GF_plus_autoVar = (xi_GF_plus_autoVar/u.arcsec**4.).to(1/u.rad**4.).value
+        xi_GF_minus_autoVar = (xi_GF_minus_autoVar/u.arcsec**4.).to(1/u.rad**4.).value
+
+        # .. Export flexion-flexion correlation functions to .pkl file
+        col_list = ['theta', 'Np', 
+                    'xi_FF_plus', 'xi_FF_plus_autoVar', 'xi_FF_minus', 'xi_FF_minus_autoVar', 
+                    'xi_GG_plus', 'xi_GG_plus_autoVar', 'xi_GG_minus', 'xi_GG_minus_autoVar', 
+                    'xi_FG_plus', 'xi_FG_plus_autoVar', 'xi_FG_minus', 'xi_FG_minus_autoVar', 
+                    'xi_GF_plus', 'xi_GF_plus_autoVar', 'xi_GF_minus', 'xi_GF_minus_autoVar', 
+                    'xi_FF_cross1', 'xi_FF_cross2',
+                    'xi_GG_cross1', 'xi_GG_cross2',
+                    'xi_FG_cross1', 'xi_FG_cross2',
+                    'xi_GF_cross1', 'xi_GF_cross2']
+        arrs = [theta_list, Np, 
+                xi_FF_plus, xi_FF_plus_autoVar, xi_FF_minus, xi_FF_minus_autoVar, 
+                xi_GG_plus, xi_GG_plus_autoVar, xi_GG_minus, xi_GG_minus_autoVar, 
+                xi_FG_plus, xi_FG_plus_autoVar, xi_FG_minus, xi_FG_minus_autoVar, 
+                xi_GF_plus, xi_GF_plus_autoVar, xi_GF_minus, xi_GF_minus_autoVar, 
+                xi_FF_cross1, xi_FF_cross2,
+                xi_GG_cross1, xi_GG_cross2,
+                xi_FG_cross1, xi_FG_cross2,
+                xi_GF_cross1, xi_GF_cross2]
+        dat = {i:arrs[j] for i,j in zip(col_list, range(len(col_list)))}
+        out_frame = pd.DataFrame(data = dat, columns = col_list)
+        #out_frame.to_pickle(self.survey+'/'+self.survey+'_Measure/flexion-flexion_two_point_measured_'+self.survey+'_bin_combo_'+self.bin_combo+'.pkl')
+        out_frame.to_csv('flexion-flexion_two_point_measured_'+self.survey+'_bin_combo_'+self.bin_combo+'.csv')
 
     def get_binned_two_point_shearflex(self, theta_list, bins):
         """
@@ -386,25 +432,36 @@ class MeasureCF2P:
         # Get the total number of bins
         N_bins = len(theta_list)
         # Define the arrays for two-point calculation
-        wp_bins = [[] for _ in range(N_bins)]
-        xi_gamF_plus_bins = [[] for _ in range(N_bins)]
-        xi_gamF_minus_bins = [[] for _ in range(N_bins)]
-        xi_Fgam_plus_bins = [[] for _ in range(N_bins)]
-        xi_Fgam_minus_bins = [[] for _ in range(N_bins)]
-        xi_Ggam_plus_bins = [[] for _ in range(N_bins)]
-        xi_Ggam_minus_bins = [[] for _ in range(N_bins)]
-        xi_gamG_plus_bins = [[] for _ in range(N_bins)]
-        xi_gamG_minus_bins = [[] for _ in range(N_bins)]
-        
-        xi_gamF_plus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_gamF_minus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_Fgam_plus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_Fgam_minus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_Ggam_plus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_Ggam_minus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_gamG_plus_autoVar_bins = [[] for _ in range(N_bins)]
-        xi_gamG_minus_autoVar_bins = [[] for _ in range(N_bins)]
-        
+        # .. Number of pairs (product of weights)
+        Np = np.zeros(N_bins)
+        # .. Two-point functions
+        xi_gamF_plus_bins = np.zeros(N_bins)
+        xi_gamF_minus_bins = np.zeros(N_bins)
+        xi_Fgam_plus_bins = np.zeros(N_bins)
+        xi_Fgam_minus_bins = np.zeros(N_bins)
+        xi_Ggam_plus_bins = np.zeros(N_bins)
+        xi_Ggam_minus_bins = np.zeros(N_bins)
+        xi_gamG_plus_bins = np.zeros(N_bins)
+        xi_gamG_minus_bins = np.zeros(N_bins)
+        # .. Autovariance
+        xi_gamF_plus_autoVar_bins = np.zeros(N_bins)
+        xi_gamF_minus_autoVar_bins = np.zeros(N_bins)
+        xi_Fgam_plus_autoVar_bins = np.zeros(N_bins)
+        xi_Fgam_minus_autoVar_bins = np.zeros(N_bins)
+        xi_Ggam_plus_autoVar_bins = np.zeros(N_bins)
+        xi_Ggam_minus_autoVar_bins = np.zeros(N_bins)
+        xi_gamG_plus_autoVar_bins = np.zeros(N_bins)
+        xi_gamG_minus_autoVar_bins = np.zeros(N_bins)
+        # B-mode correlations
+        xi_gamF_cross1 = np.zeros(N_bins)
+        xi_gamF_cross2 = np.zeros(N_bins)
+        xi_Fgam_cross1 = np.zeros(N_bins)
+        xi_Fgam_cross2 = np.zeros(N_bins)
+        xi_Ggam_cross1 = np.zeros(N_bins)
+        xi_Ggam_cross2 = np.zeros(N_bins)
+        xi_gamG_cross1 = np.zeros(N_bins)
+        xi_gamG_cross2 = np.zeros(N_bins)
+
         # Get the width of each grid cell:
         dg = np.max(bins)
         # Let (Gx,Gy) denote the grid pairs.  We can assign each galaxy, k, to a
@@ -433,31 +490,10 @@ class MeasureCF2P:
 
         for i in range(self.Ngals):
 
-            # Get grid coordinates for galaxy i
-            gx_i = gx_list[i]
-            gy_i = gy_list[i]
-            # Get (RA,Dec) for galaxy i
-            x_i = x_list[i]
-            y_i = y_list[i]
-            # Get size for galaxy i
-            a_i = self.a_list[i]
-            a_i *= (u.arcsec)
-            a_i = a_i.to(u.rad).value 
-            # Get weight of galaxy i
-            w_i = self.w_list[i]
-            # Get flexion of galaxy i
-            F1_i = self.F1_list[i]
-            F2_i = self.F2_list[i]
-            G1_i = self.G1_list[i]
-            G2_i = self.G2_list[i]
-            # Get ellipticity of galaxy i
-            eps1_i = self.eps1_list[i]
-            eps2_i = self.eps2_list[i]
-
             # Get galaxy pairs {j} associated with galaxy i
             id = np.where((j_list > i) &
-                          (gx_list <= gx_i+1) & (gx_list >= gx_i-1) &
-                          (gy_list <= gy_i+1) & (gy_list >= gy_i-1))
+                          (gx_list <= gx_list[i]+1) & (gx_list >= gx_list[i]-1) &
+                          (gy_list <= gy_list[i]+1) & (gy_list >= gy_list[i]-1))
             # Positions of each galaxy j
             x_j_list = x_list[id]
             y_j_list = y_list[id]
@@ -480,45 +516,34 @@ class MeasureCF2P:
             for j in range(N_j):
 
                 # Get separation between (i,j)
-                theta_ij = self.theta_ij(x_i,y_i,x_j_list[j],y_j_list[j])
+                theta_ij = np.sqrt((x_j_list[j]-self.x_list[i])**2.+(y_j_list[j]-self.y_list[i])**2.)
+                if theta_ij >= np.max(bins):
+                    continue
                 # Get polar angle between (i,j)
-                varPhi_ij = self.varPhi_ij(x_i,y_i,x_j_list[j],y_j_list[j])
-                # Calculate tangential and radial flexions for pair (i,j)
-                F1_rot_i = self.F1_rot(F1_i, F2_i, varPhi_ij)
-                F1_rot_j = self.F1_rot(F1_j_list[j], F2_j_list[j], varPhi_ij)
-                F2_rot_i = self.F2_rot(F1_i, F2_i, varPhi_ij)
-                F2_rot_j = self.F2_rot(F1_j_list[j], F2_j_list[j], varPhi_ij)
-                G1_rot_i = self.G1_rot(G1_i, G2_i, varPhi_ij)
-                G1_rot_j = self.G1_rot(G1_j_list[j], G2_j_list[j], varPhi_ij)
-                G2_rot_i = self.G2_rot(G1_i, G2_i, varPhi_ij)
-                G2_rot_j = self.G2_rot(G1_j_list[j], G2_j_list[j], varPhi_ij)
-                # Calculate tangential and cross ellipticities for pair (i,j)
-                eps1_rot_i = self.eps1_rot(eps1_i, eps2_i, varPhi_ij)
-                eps1_rot_j = self.eps1_rot(eps1_j_list[j], eps2_j_list[j], varPhi_ij)
-                eps2_rot_i = self.eps2_rot(eps1_i, eps2_i, varPhi_ij)
-                eps2_rot_j = self.eps2_rot(eps1_j_list[j], eps2_j_list[j], varPhi_ij)
-                # Convert the flexions from 1/arcsec to 1/rad:
-                F1_rot_i /= (u.arcsec)
-                F1_rot_i = F1_rot_i.to(1/u.rad).value
-                F1_rot_j /= (u.arcsec)
-                F1_rot_j = F1_rot_j.to(1/u.rad).value
-                F2_rot_i /= (u.arcsec)
-                F2_rot_i = F2_rot_i.to(1/u.rad).value
-                F2_rot_j /= (u.arcsec)
-                F2_rot_j = F2_rot_j.to(1/u.rad).value
-                G1_rot_i /= (u.arcsec)
-                G1_rot_i = G1_rot_i.to(1/u.rad).value
-                G1_rot_j /= (u.arcsec)
-                G1_rot_j = G1_rot_j.to(1/u.rad).value
-                G2_rot_i /= (u.arcsec)
-                G2_rot_i = G2_rot_i.to(1/u.rad).value
-                G2_rot_j /= (u.arcsec)
-                G2_rot_j = G2_rot_j.to(1/u.rad).value
-                # Convert size to rad
-                a_j = a_j_list[j]*(u.arcsec)
-                a_j = a_j.to(u.rad).value
+                varPhi_ij = np.arctan2((y_j_list[j]-self.y_list[i]), (x_j_list[j]-self.x_list[i]))
+                # Get trig functions associated with polar angle 
+                cos_varPhi_ij = np.cos(varPhi_ij)
+                sin_varPhi_ij = np.sin(varPhi_ij)
+                cos_2varPhi_ij = np.cos(2*varPhi_ij)
+                sin_2varPhi_ij = np.sin(2*varPhi_ij)
+                cos_3varPhi_ij = np.cos(3*varPhi_ij)
+                sin_3varPhi_ij = np.sin(3*varPhi_ij)
+                # Get rotated flexions and ellipticities for (i,j)
+                F1_rot_i = -self.F1_list[i]*cos_varPhi_ij - self.F2_list[i]*sin_varPhi_ij
+                F1_rot_j = -F1_j_list[j]*cos_varPhi_ij - F2_j_list[j]*sin_varPhi_ij
+                F2_rot_i = -self.F2_list[i]*cos_varPhi_ij + self.F1_list[i]*sin_varPhi_ij 
+                F2_rot_j = -F2_j_list[j]*cos_varPhi_ij + F1_j_list[j]*sin_varPhi_ij 
+                G1_rot_i = self.G1_list[i]*cos_3varPhi_ij + self.G2_list[i]*sin_3varPhi_ij 
+                G1_rot_j = G1_j_list[j]*cos_3varPhi_ij + G2_j_list[j]*sin_3varPhi_ij
+                G2_rot_i = self.G2_list[i]*cos_3varPhi_ij - self.G1_list[i]*sin_3varPhi_ij
+                G2_rot_j = G2_j_list[j]*cos_3varPhi_ij - G1_j_list[j]*sin_3varPhi_ij
+                eps1_rot_i = -self.eps1_list[i]*cos_2varPhi_ij - self.eps2_list[i]*sin_2varPhi_ij
+                eps1_rot_j = -eps1_j_list[j]*cos_2varPhi_ij - eps2_j_list[j]*sin_2varPhi_ij
+                eps2_rot_i = -self.eps2_list[i]*cos_2varPhi_ij + self.eps1_list[i]*sin_2varPhi_ij 
+                eps2_rot_j = -eps2_j_list[j]*cos_2varPhi_ij + eps1_j_list[j]*sin_2varPhi_ij
+
                 # Weight for each pair
-                wp_ij = w_i*w_j_list[j]
+                wp_ij = self.w_list[i]*w_j_list[j]
                 # Two-points for each pair
                 xi_epsF_p_ij = wp_ij*(eps1_rot_i*F1_rot_j + eps2_rot_i*F2_rot_j)
                 xi_epsF_m_ij = wp_ij*(eps1_rot_i*F1_rot_j - eps2_rot_i*F2_rot_j)
@@ -529,14 +554,23 @@ class MeasureCF2P:
                 xi_epsG_p_ij = wp_ij*(eps1_rot_i*G1_rot_j + eps2_rot_i*G2_rot_j)
                 xi_epsG_m_ij = wp_ij*(eps1_rot_i*G1_rot_j - eps2_rot_i*G2_rot_j)
                 # Autovar for each pair
-                xi_epsF_p_aV_ij = (wp_ij/(a_j))**2.
-                xi_epsF_m_aV_ij = (wp_ij/(a_j))**2.
-                xi_Feps_p_aV_ij = (wp_ij/(a_i))**2.
-                xi_Feps_m_aV_ij = (wp_ij/(a_i))**2.
-                xi_Geps_p_aV_ij = (wp_ij/(a_i))**2.
-                xi_Geps_m_aV_ij = (wp_ij/(a_i))**2.
-                xi_epsG_p_aV_ij = (wp_ij/(a_j))**2.
-                xi_epsG_m_aV_ij = (wp_ij/(a_j))**2.
+                xi_epsF_p_aV_ij = (wp_ij/(a_j_list[j]))**2.
+                xi_epsF_m_aV_ij = (wp_ij/(a_j_list[j]))**2.
+                xi_Feps_p_aV_ij = (wp_ij/(self.a_list[i]))**2.
+                xi_Feps_m_aV_ij = (wp_ij/(self.a_list[i]))**2.
+                xi_Geps_p_aV_ij = (wp_ij/(self.a_list[i]))**2.
+                xi_Geps_m_aV_ij = (wp_ij/(self.a_list[i]))**2.
+                xi_epsG_p_aV_ij = (wp_ij/(a_j_list[j]))**2.
+                xi_epsG_m_aV_ij = (wp_ij/(a_j_list[j]))**2.
+                # B-modes for each pair
+                xi_epsF_cross1 = wp_ij*(eps1_rot_i*F2_rot_j)
+                xi_epsF_cross2 = wp_ij*(eps2_rot_i*F1_rot_j)
+                xi_Feps_cross1 = wp_ij*(F1_rot_i*eps2_rot_j)
+                xi_Feps_cross2 = wp_ij*(F2_rot_i*eps1_rot_j)
+                xi_Geps_cross1 = wp_ij*(G1_rot_i*eps2_rot_j)
+                xi_Geps_cross2 = wp_ij*(G2_rot_i*eps1_rot_j)
+                xi_epsG_cross1 = wp_ij*(eps1_rot_i*G2_rot_j)
+                xi_epsG_cross2 = wp_ij*(eps2_rot_i*G1_rot_j)
 
                 # Get the bin for each galaxy pair (i,j).  It is simplest to use
                 # np.digitize(theta_ij, bins).  This returns the bin number that 
@@ -546,170 +580,115 @@ class MeasureCF2P:
                 bin_ij = np.digitize(theta_ij, bins, right=True)
                 if (bin_ij > 0) & (bin_ij < N_bins + 1):
                     bin_index = bin_ij-1
-                    wp_bins[bin_index].append(wp_ij)
-                    xi_gamF_plus_bins[bin_index].append(xi_epsF_p_ij)
-                    xi_gamF_minus_bins[bin_index].append(xi_epsF_m_ij)
-                    xi_Fgam_plus_bins[bin_index].append(xi_Feps_p_ij)
-                    xi_Fgam_minus_bins[bin_index].append(xi_Feps_m_ij)
-                    xi_Ggam_plus_bins[bin_index].append(xi_Geps_p_ij)
-                    xi_Ggam_minus_bins[bin_index].append(xi_Geps_m_ij)
-                    xi_gamG_plus_bins[bin_index].append(xi_epsG_p_ij)
-                    xi_gamG_minus_bins[bin_index].append(xi_epsG_m_ij)
+                    Np[bin_index] += wp_ij
+                    xi_gamF_plus_bins[bin_index] += xi_epsF_p_ij
+                    xi_gamF_minus_bins[bin_index] += xi_epsF_m_ij
+                    xi_Fgam_plus_bins[bin_index] += xi_Feps_p_ij
+                    xi_Fgam_minus_bins[bin_index] += xi_Feps_m_ij
+                    xi_Ggam_plus_bins[bin_index] += xi_Geps_p_ij
+                    xi_Ggam_minus_bins[bin_index] += xi_Geps_m_ij
+                    xi_gamG_plus_bins[bin_index] += xi_epsG_p_ij
+                    xi_gamG_minus_bins[bin_index] += xi_epsG_m_ij
                     
-                    xi_gamF_plus_autoVar_bins[bin_index].append(xi_epsF_p_aV_ij)
-                    xi_gamF_minus_autoVar_bins[bin_index].append(xi_epsF_m_aV_ij)
-                    xi_Fgam_plus_autoVar_bins[bin_index].append(xi_Feps_p_aV_ij)
-                    xi_Fgam_minus_autoVar_bins[bin_index].append(xi_Feps_m_aV_ij)
-                    xi_Ggam_plus_autoVar_bins[bin_index].append(xi_Geps_p_aV_ij)
-                    xi_Ggam_minus_autoVar_bins[bin_index].append(xi_Geps_m_aV_ij)
-                    xi_gamG_plus_autoVar_bins[bin_index].append(xi_epsG_p_aV_ij)
-                    xi_gamG_minus_autoVar_bins[bin_index].append(xi_epsG_m_aV_ij)
-        
-        return wp_bins, xi_gamF_plus_bins, xi_gamF_minus_bins, xi_Fgam_plus_bins, xi_Fgam_minus_bins, xi_Ggam_plus_bins, xi_Ggam_minus_bins, xi_gamG_plus_bins, xi_gamG_minus_bins, xi_gamF_plus_autoVar_bins, xi_gamF_minus_autoVar_bins, xi_Fgam_plus_autoVar_bins, xi_Fgam_minus_autoVar_bins, xi_Ggam_plus_autoVar_bins, xi_Ggam_minus_autoVar_bins, xi_gamG_plus_autoVar_bins, xi_gamG_minus_autoVar_bins 
+                    xi_gamF_plus_autoVar_bins[bin_index] += xi_epsF_p_aV_ij
+                    xi_gamF_minus_autoVar_bins[bin_index] += xi_epsF_m_aV_ij
+                    xi_Fgam_plus_autoVar_bins[bin_index] += xi_Feps_p_aV_ij
+                    xi_Fgam_minus_autoVar_bins[bin_index] += xi_Feps_m_aV_ij
+                    xi_Ggam_plus_autoVar_bins[bin_index] += xi_Geps_p_aV_ij
+                    xi_Ggam_minus_autoVar_bins[bin_index] += xi_Geps_m_aV_ij
+                    xi_gamG_plus_autoVar_bins[bin_index] += xi_epsG_p_aV_ij
+                    xi_gamG_minus_autoVar_bins[bin_index] += xi_epsG_m_aV_ij
 
-    # To Do: finish below
+                    xi_gamF_cross1_bins[bin_index] += xi_epsF_c1_ij
+                    xi_gamF_cross2_bins[bin_index] += xi_epsF_c2_ij
+                    xi_Fgam_cross1_bins[bin_index] += xi_Feps_c1_ij
+                    xi_Fgam_cross2_bins[bin_index] += xi_Feps_c2_ij
+                    xi_Ggam_cross1_bins[bin_index] += xi_Geps_c1_ij
+                    xi_Ggam_cross2_bins[bin_index] += xi_Geps_c2_ij
+                    xi_gamG_cross1_bins[bin_index] += xi_epsG_c1_ij
+                    xi_gamG_cross2_bins[bin_index] += xi_epsG_c2_ij
 
-    def get_flexflex_corr(self, wp_bins, 
-                            xi_FF_plus_bins, xi_FF_minus_bins, 
-                            xi_GG_plus_bins, xi_GG_minus_bins,
-                            xi_FG_plus_bins, xi_FG_minus_bins, 
-                            xi_GF_plus_bins, xi_GF_minus_bins, 
-                            xi_FF_plus_autoVar_bins, xi_FF_minus_autoVar_bins, 
-                            xi_GG_plus_autoVar_bins, xi_GG_minus_autoVar_bins,
-                            xi_FG_plus_autoVar_bins, xi_FG_minus_autoVar_bins, 
-                            xi_GF_plus_autoVar_bins, xi_GF_minus_autoVar_bins):
-        """
-        Calculate the two-point correlation functions and their errors
-        within each bin.
-        """
-        # Get number of bins
-        N_bins = len(wp_bins)
-        # Initiliaze arrays for two-point functions and errors
-        xi_FF_plus_list = []
-        xi_FF_minus_list = []
-        xi_FF_plus_autoVar_list = []
-        xi_FF_minus_autoVar_list = []
-        xi_GG_plus_list = []
-        xi_GG_minus_list = []
-        xi_GG_plus_autoVar_list = []
-        xi_GG_minus_autoVar_list = []
-        xi_FG_plus_list = []
-        xi_FG_minus_list = []
-        xi_FG_plus_autoVar_list = []
-        xi_FG_minus_autoVar_list = []
-        xi_GF_plus_list = []
-        xi_GF_minus_list = []
-        xi_GF_plus_autoVar_list = []
-        xi_GF_minus_autoVar_list = []
 
-        for i in range(N_bins):
-            # Get number of pairs in bin i
-            Np = np.sum(wp_bins[i])
-            # Get two point correlation functions and autovariances
-            # .. FF
-            print('Np =', Np)
-            xi_FF_p = np.sum(xi_FF_plus_bins[i])/Np
-            xi_FF_p_aV = (self.sigma_aF**4./(2*Np**2.))*np.sum(xi_FF_plus_autoVar_bins[i])
-            xi_FF_m = np.sum(xi_FF_minus_bins[i])/Np
-            xi_FF_m_aV = (self.sigma_aF**4./(2*Np**2.))*np.sum(xi_FF_minus_autoVar_bins[i])
-            xi_FF_plus_list.append(xi_FF_p)
-            xi_FF_minus_list.append(xi_FF_m)
-            xi_FF_plus_autoVar_list.append(xi_FF_p_aV)
-            xi_FF_minus_autoVar_list.append(xi_FF_m_aV)
-            # .. GG
-            xi_GG_p = np.sum(xi_GG_plus_bins[i])/Np
-            xi_GG_p_aV = (self.sigma_aG**4./(2*Np**2.))*np.sum(xi_GG_plus_autoVar_bins[i])
-            xi_GG_m = np.sum(xi_GG_minus_bins[i])/Np
-            xi_GG_m_aV = (self.sigma_aG**4./(2*Np**2.))*np.sum(xi_GG_minus_autoVar_bins[i])
-            xi_GG_plus_list.append(xi_GG_p)
-            xi_GG_minus_list.append(xi_GG_m)
-            xi_GG_plus_autoVar_list.append(xi_GG_p_aV)
-            xi_GG_minus_autoVar_list.append(xi_GG_m_aV)
-            # .. FG
-            xi_FG_p = np.sum(xi_FG_plus_bins[i])/Np
-            xi_FG_p_aV = (self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))*np.sum(xi_FG_plus_autoVar_bins[i])
-            xi_FG_m = np.sum(xi_FG_minus_bins[i])/Np
-            xi_FG_m_aV = (self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))*np.sum(xi_FG_minus_autoVar_bins[i])
-            xi_FG_plus_list.append(xi_FG_p)
-            xi_FG_minus_list.append(xi_FG_m)
-            xi_FG_plus_autoVar_list.append(xi_FG_p_aV)
-            xi_FG_minus_autoVar_list.append(xi_FG_m_aV)
-            # .. GF
-            xi_GF_p = np.sum(xi_GF_plus_bins[i])/Np
-            xi_GF_p_aV = (self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))*np.sum(xi_GF_plus_autoVar_bins[i])
-            xi_GF_m = np.sum(xi_GF_minus_bins[i])/Np
-            xi_GF_m_aV = (self.sigma_aF**2.*self.sigma_aG**2./(2*Np**2.))*np.sum(xi_GF_minus_autoVar_bins[i])
-            xi_GF_plus_list.append(xi_GF_p)
-            xi_GF_minus_list.append(xi_GF_m)
-            xi_GF_plus_autoVar_list.append(xi_GF_p_aV)
-            xi_GF_minus_autoVar_list.append(xi_GF_m_aV)
+        xi_gamF_plus = xi_gamF_plus_bins/Np
+        xi_gamF_minus = xi_gamF_minus_bins/Np
+        xi_Fgam_plus = xi_Fgam_plus_bins/Np
+        xi_Fgam_minus = xi_Fgam_minus_bins/Np
+        xi_Ggam_plus = xi_Ggam_plus_bins/Np
+        xi_Ggam_minus = xi_Ggam_minus_bins/Np
+        xi_gamG_plus = xi_gamG_plus_bins/Np
+        xi_gamG_minus = xi_gamG_minus_bins/Np
 
-        return xi_FF_plus_list, xi_FF_plus_autoVar_list, xi_FF_minus_list, xi_FF_minus_autoVar_list, xi_GG_plus_list, xi_GG_plus_autoVar_list, xi_GG_minus_list, xi_GG_minus_autoVar_list, xi_GF_plus_list, xi_GF_plus_autoVar_list, xi_GF_minus_list, xi_GF_minus_autoVar_list
+        xi_gamF_plus_autoVar = xi_gamF_plus_autoVar_bins*(self.sigma_eps**2.*self.sigma_aF**2./(2*Np**2.))
+        xi_gamF_minus_autoVar = xi_gamF_minus_autoVar_bins*(self.sigma_eps**2.*self.sigma_aF**2./(2*Np**2.))
+        xi_Fgam_plus_autoVar = xi_Fgam_plus_autoVar_bins*(self.sigma_eps**2.*self.sigma_aF**2./(2*Np**2.))
+        xi_Fgam_minus_autoVar = xi_Fgam_minus_autoVar_bins*(self.sigma_eps**2.*self.sigma_aF**2./(2*Np**2.))
+        xi_Ggam_plus_autoVar = xi_Ggam_plus_autoVar_bins*(self.sigma_eps**2.*self.sigma_aG**2./(2*Np**2.))
+        xi_Ggam_minus_autoVar = xi_Ggam_minus_autoVar_bins*(self.sigma_eps**2.*self.sigma_aG**2./(2*Np**2.))
+        xi_gamG_plus_autoVar = xi_gamG_plus_autoVar_bins*(self.sigma_eps**2.*self.sigma_aG**2./(2*Np**2.))
+        xi_gamG_minus_autoVar = xi_gamG_minus_autoVar_bins*(self.sigma_eps**2.*self.sigma_aG**2./(2*Np**2.))
 
-    def get_shearflex_corr(self, wp_bins,
-                             xi_gamF_plus_bins, xi_gamF_minus_bins, 
-                             xi_gamG_plus_bins, xi_gamG_minus_bins, 
-                             xi_gamF_plus_autoVar_bins, xi_gamF_minus_autoVar_bins, 
-                             xi_gamG_plus_autoVar_bins, xi_gamG_minus_autoVar_bins):
-        """
-        Calculate the two-point correlation functions and their errors
-        within each bin.
-        """
-        # Get number of bins
-        N_bins = len(wp_bins)
-        # Initiliaze arrays for two-point functions and errors
-        xi_gamF_plus_list = []
-        xi_gamF_minus_list = []
-        xi_gamF_plus_autoVar_list = []
-        xi_gamF_minus_autoVar_list = []
-        xi_gamG_plus_list = []
-        xi_gamG_minus_list = []
-        xi_gamG_plus_autoVar_list = []
-        xi_gamG_minus_autoVar_list = []
+        xi_gamF_cross1 = xi_gamF_cross1_bins/Np
+        xi_gamF_cross2 = xi_gamF_cross2_bins/Np
+        xi_Fgam_cross1 = xi_Fgam_cross1_bins/Np
+        xi_Fgam_cross2 = xi_Fgam_cross2_bins/Np
+        xi_Ggam_cross1 = xi_Ggam_cross1_bins/Np
+        xi_Ggam_cross2 = xi_Ggam_cross2_bins/Np
+        xi_gamG_cross1 = xi_gamG_cross1_bins/Np
+        xi_gamG_cross2 = xi_gamG_cross2_bins/Np
 
-        for i in range(N_bins):
-            # Get number of pairs in bin i
-            Np = np.sum(wp_bins[i])
-            # Get two point correlation functions and autovariances
-            # .. gamF
-            xi_gamF_p = np.sum(xi_gamF_plus_bins[i])/Np
-            xi_gamF_p_aV = (self.sigma_eps**2.*self.sigma_aF**2./(2*Np**2.))*np.sum(xi_gamF_plus_autoVar_bins[i])
-            xi_gamF_m = np.sum(xi_gamF_minus_bins[i])/Np
-            xi_gamF_m_aV = (self.sigma_eps**2.*self.sigma_aF**2./(2*Np**2.))*np.sum(xi_gamF_minus_autoVar_bins[i])
-            xi_gamF_plus_list.append(xi_gamF_p)
-            xi_gamF_minus_list.append(xi_gamF_m)
-            xi_gamF_plus_autoVar_list.append(xi_gamF_p_aV)
-            xi_gamF_minus_autoVar_list.append(xi_gamF_m_aV)
-            # .. Fgam
-            xi_Fgam_p = np.sum(xi_Fgam_plus_bins[i])/Np
-            xi_Fgam_p_aV = (self.sigma_eps**2.*self.sigma_aF**2./(2*Np**2.))*np.sum(xi_Fgam_plus_autoVar_bins[i])
-            xi_Fgam_m = np.sum(xi_Fgam_minus_bins[i])/Np
-            xi_Fgam_m_aV = (self.sigma_eps**2.*self.sigma_aF**2./(2*Np**2.))*np.sum(xi_Fgam_minus_autoVar_bins[i])
-            xi_Fgam_plus_list.append(xi_Fgam_p)
-            xi_Fgam_minus_list.append(xi_Fgam_m)
-            xi_Fgam_plus_autoVar_list.append(xi_Fgam_p_aV)
-            xi_Fgam_minus_autoVar_list.append(xi_Fgam_m_aV)
-            # .. Ggam
-            xi_Ggam_p = np.sum(xi_Ggam_plus_bins[i])/Np
-            xi_Ggam_p_aV = (self.sigma_eps**2.*self.sigma_aG**2./(2*Np**2.))*np.sum(xi_Ggam_plus_autoVar_bins[i])
-            xi_Ggam_m = np.sum(xi_Ggam_minus_bins[i])/Np
-            xi_Ggam_m_aV = (self.sigma_eps**2.*self.sigma_aG**2./(2*Np**2.))*np.sum(xi_Ggam_minus_autoVar_bins[i])
-            xi_Ggam_plus_list.append(xi_Ggam_p)
-            xi_Ggam_minus_list.append(xi_Ggam_m)
-            xi_Ggam_plus_autoVar_list.append(xi_Ggam_p_aV)
-            xi_Ggam_minus_autoVar_list.append(xi_Ggam_m_aV)
-            # .. gamG
-            xi_gamG_p = np.sum(xi_gamG_plus_bins[i])/Np
-            xi_gamG_p_aV = (self.sigma_eps**2.*self.sigma_aG**2./(2*Np**2.))*np.sum(xi_gamG_plus_autoVar_bins[i])
-            xi_gamG_m = np.sum(xi_gamG_minus_bins[i])/Np
-            xi_gamG_m_aV = (self.sigma_eps**2.*self.sigma_aG**2./(2*Np**2.))*np.sum(xi_gamG_minus_autoVar_bins[i])
-            xi_gamG_plus_list.append(xi_gamG_p)
-            xi_gamG_minus_list.append(xi_gamG_m)
-            xi_gamG_plus_autoVar_list.append(xi_gamG_p_aV)
-            xi_gamG_minus_autoVar_list.append(xi_gamG_m_aV)
+        # Convert shear-flexions from 1/arcsec to 1/rad
+        xi_gamF_plus = (xi_gamF_plus/u.arcsec).to(1/u.rad).value
+        xi_gamF_minus = (xi_gamF_minus/u.arcsec).to(1/u.rad).value
+        xi_Fgam_plus = (xi_Fgam_plus/u.arcsec).to(1/u.rad).value
+        xi_Fgam_minus = (xi_Fgam_minus/u.arcsec).to(1/u.rad).value
+        xi_Ggam_plus = (xi_Ggam_plus/u.arcsec).to(1/u.rad).value
+        xi_Ggam_minus = (xi_Ggam_minus/u.arcsec).to(1/u.rad).value
+        xi_gamG_plus = (xi_gamG_plus/u.arcsec).to(1/u.rad).value
+        xi_gamG_minus = (xi_gamG_minus/u.arcsec).to(1/u.rad).value
 
-        return xi_gamF_plus_list, xi_gamF_plus_autoVar_list, xi_gamF_minus_list, xi_gamF_minus_autoVar_list, xi_Fgam_plus_list, xi_Fgam_plus_autoVar_list, xi_Fgam_minus_list, xi_Fgam_minus_autoVar_list, xi_Ggam_plus_list, xi_Ggam_plus_autoVar_list, xi_Ggam_minus_list,  xi_Ggam_minus_autoVar_list, xi_gamG_plus_autoVar_list, xi_gamG_minus_list,  xi_gamG_minus_autoVar_list
+        xi_gamF_cross1 = (xi_gamF_cross1/u.arcsec).to(1/u.rad).value
+        xi_gamF_cross2 = (xi_gamF_cross2/u.arcsec).to(1/u.rad).value
+        xi_Fgam_cross1 = (xi_Fgam_cross1/u.arcsec).to(1/u.rad).value
+        xi_Fgam_cross2 = (xi_Fgam_cross2/u.arcsec).to(1/u.rad).value
+        xi_Ggam_cross1 = (xi_Ggam_cross1/u.arcsec).to(1/u.rad).value
+        xi_Ggam_cross2 = (xi_Ggam_cross2/u.arcsec).to(1/u.rad).value
+        xi_gamG_cross1 = (xi_gamG_cross1/u.arcsec).to(1/u.rad).value
+        xi_gamG_cross2 = (xi_gamG_cross2/u.arcsec).to(1/u.rad).value
 
+        xi_gamF_plus_autoVar = (xi_gamF_plus_autoVar/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_gamF_minus_autoVar = (xi_gamF_minus_autoVar/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_Fgam_plus_autoVar = (xi_Fgam_plus_autoVar/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_Fgam_minus_autoVar = (xi_Fgam_minus_autoVar/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_Ggam_plus_autoVar = (xi_Ggam_plus_autoVar/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_Ggam_minus_autoVar = (xi_Ggam_minus_autoVar/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_gamG_plus_autoVar = (xi_gamG_plus_autoVar/u.arcsec**2.).to(1/u.rad**2.).value
+        xi_gamG_minus_autoVar = (xi_gamG_minus_autoVar/u.arcsec**2.).to(1/u.rad**2.).value
+
+        # .. Export shear-flexion correlation functions to .pkl file
+        col_list = ['theta', 'Np', 
+                    'xi_gamF_plus', 'xi_gamF_plus_autoVar', 'xi_gamF_minus', 'xi_gamF_minus_autoVar', 
+                    'xi_Fgam_plus', 'xi_Fgam_plus_autoVar', 'xi_Fgam_minus', 'xi_Fgam_minus_autoVar', 
+                    'xi_Ggam_plus', 'xi_Ggam_plus_autoVar', 'xi_Ggam_minus', 'xi_Ggam_minus_autoVar', 
+                    'xi_gamG_plus', 'xi_gamG_plus_autoVar', 'xi_gamG_minus', 'xi_gamG_minus_autoVar'
+                    'xi_gamF_cross1', 'xi_gamF_cross2',
+                    'xi_Fgam_cross1', 'xi_Fgam_cross2',
+                    'xi_Ggam_cross1', 'xi_Ggam_cross2',
+                    'xi_gamG_cross1', 'xi_gamG_cross2']
+        arrs = [theta_list, Np, 
+                xi_gamF_plus, xi_gamF_plus_autoVar, xi_gamF_minus, xi_gamF_minus_autoVar, 
+                xi_Fgam_plus, xi_Fgam_plus_autoVar, xi_Fgam_minus, xi_Fgam_minus_autoVar, 
+                xi_Ggam_plus, xi_Ggam_plus_autoVar, xi_Ggam_minus, xi_Ggam_minus_autoVar, 
+                xi_gamG_plus, xi_gamG_plus_autoVar, xi_gamG_minus, xi_gamG_minus_autoVar, 
+                xi_gamF_cross1, xi_gamF_cross2,
+                xi_Fgam_cross1, xi_Fgam_cross2,
+                xi_Ggam_cross1, xi_Ggam_cross2,
+                xi_gamG_cross1, xi_gamG_cross2]
+        dat = {i:arrs[j] for i,j in zip(col_list, range(len(col_list)))}
+        out_frame = pd.DataFrame(data = dat, columns = col_list)
+        #out_frame.to_pickle(self.survey+'/'+self.survey+'_Measure/shear-flexion_two_point_measured_'+self.survey+'_bin_combo_'+self.bin_combo+'.pkl') 
+        out_frame.to_csv('shear-flexion_two_point_measured_'+self.survey+'_bin_combo_'+self.bin_combo+'.csv')
+    
+    
     def theta_ij(self, xi,yi,xj,yj):
         """Get the magnitude of the angular separation vector, 
              varTheta_ij = |varTheta_j - varTheta_i|,
@@ -746,7 +725,7 @@ class MeasureCF2P:
              G1_rot = -Re(Fe^(-i*3*varPhi)),
            where G = G1 + iG2, and phi is the polar angle of the separation vector theta
         """
-        G1_r = -G1*np.cos(3*varPhi) - G2*np.sin(3*varPhi)
+        G1_r = G1*np.cos(3*varPhi) + G2*np.sin(3*varPhi)
         return G1_r
 
     def G2_rot(self, G1, G2, varPhi):
@@ -754,7 +733,7 @@ class MeasureCF2P:
              G2_rot = -Im(Fe^(-i*3*varPhi)),
            where G = G1 + iG2, and phi is the polar angle of the separation vector theta
         """
-        G2_r = -G2*np.cos(3*varPhi) + G1*np.sin(3*varPhi)
+        G2_r = G2*np.cos(3*varPhi) - G1*np.sin(3*varPhi)
         return G2_r
 
     def eps1_rot(self, eps1, eps2, varPhi):

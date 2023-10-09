@@ -23,7 +23,7 @@
 ## Modules
 
 * `coflex_power.py`: Computes theoretical cosmic weak lensing power spectra
-* `coflex_two_point.py`: Computes theoretical cosmic weak lensing two-point correlation functions
+* `coflex_twopoint.py`: Computes theoretical cosmic weak lensing two-point correlation functions
 * `measure_coflex.py`: Measures cosmic weak lensing two-point correlation functions from a dataset 
 
 
